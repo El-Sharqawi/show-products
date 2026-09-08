@@ -1,0 +1,263 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="icon" href="data:,">
+
+    <title> سوبر ماركت ابو الحاج</title>
+
+    <!-- Google Font -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome -->
+
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+
+    <!-- CSS -->
+
+    <link rel="stylesheet" href="assets/css/style.css">
+
+</head>
+
+<body>
+
+    <!-- Header -->
+
+    <header class="header">
+
+        <div class="container">
+
+            <div class="logo">
+            <button id="darkModeToggle" class="dark-mode-btn" aria-label="تبديل الوضع المظلم">
+                <i class="fa-solid fa-moon"></i>
+            </button>
+                
+                <div>
+                    <h1>  سوبر ماركت ابو الحاج
+                        <i class="fa-solid fa-cart-shopping"></i>
+                    </h1>
+
+                    <p>اعرف أسعار المنتجات </p>
+
+                </div>
+
+            </div>
+
+            <div class="store-info">
+
+                <div>
+                    <i class="fa-solid fa-location-dot"></i>
+                    <a
+                        href="https://maps.app.goo.gl/vMKAPqTGc8tNou7n7"
+                        target="_blank"
+                        class="location-link">
+                         سوبر ماركت ابو الحاج                        
+                    </a>
+                </div>
+
+                <div>
+                    <i class="fa-solid fa-phone"></i>
+                    <a href="tel:+201152656520" class="phone" target="_blank">01152656520</a>  
+                </div>
+
+                <div>
+
+                    <i class="fa-solid fa-clock"></i>
+
+                    <span>8 صباحًا - 2 بالليل</span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </header>
+
+    <!-- Search -->
+
+    <section class="search-section">
+
+        <div class="container">
+
+            <div class="search-box">
+
+                <i class="fa-solid fa-magnifying-glass"></i>
+
+                <input
+                    type="text"
+                    id="search"
+                    placeholder="ابحث عن أي منتج...">
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Categories -->
+
+    <section class="categories-section">
+
+        <div class="container">
+
+            <div
+                class="categories"
+                id="categories">
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Products -->
+
+    <main class="products-section">
+
+        <div class="container">
+
+            <div class="section-header">
+
+                <h2>
+
+                    <i class="fa-solid fa-store"></i>
+
+                    المنتجات
+
+                </h2>
+
+            </div>
+
+            <div
+                class="product-grid"
+                id="product-grid">
+
+            </div>
+            <button type="button" id="load-more-products" hidden>عرض المزيد</button>
+
+        </div>
+
+    </main>
+
+
+    <!-- Product Modal -->
+    <div
+        class="modal"
+        id="productModal">
+
+        <div class="modal-content">
+
+            <button
+                class="close-modal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+            <img
+                id="modal-image"
+                src="https://placehold.co/320x240/eef2f4/64748b?text=No+Image"
+                alt=""
+                loading="lazy"
+                decoding="async">
+
+            <h2 id="modal-name"></h2>
+
+            <p id="modal-subtitle" class="modal-badge"></p>
+
+            <p id="modal-price"></p>
+
+            <p id="modal-barcode" class="modal-detail"></p>
+
+            <p id="modal-category" class="modal-detail"></p>
+
+            <p id="modal-updated-at" class="modal-detail"></p>
+
+        </div>
+
+    </div>
+
+    <!-- Back To Top -->
+
+<a
+    href="https://wa.me/201152656520"
+    class="whatsapp-btn"
+    target="_blank"
+    aria-label="WhatsApp">
+
+    <i class="fa-brands fa-whatsapp"></i>
+
+</a>
+
+    <button
+        id="backToTop">
+
+        <i class="fa-solid fa-arrow-up"></i>
+
+    </button>
+
+    <!-- Footer -->
+
+    <footer>
+
+        <div class="container">
+
+            <h2>
+
+                <i class="fa-solid fa-cart-shopping"></i>
+
+               سوبر ماركت ابو الحاج
+               
+               <i class="fa-solid fa-cart-shopping"></i>
+
+            </h2>
+
+            <div class="footer-links">
+
+            <a href="tel:+201152656520">
+            <i class="fa-solid fa-phone"></i>
+                     اتصال
+            </a>
+
+            <a href="https://wa.me/201152656520" target="_blank">
+            <i class="fa-brands fa-whatsapp"></i>
+                واتساب
+            </a>
+
+            <a href="https://maps.app.goo.gl/vMKAPqTGc8tNou7n7" target="_blank">
+            <i class="fa-solid fa-location-dot"></i>
+                اعرف طريق الوصول
+            </a>
+
+            </div>
+
+            <p class="copyright">
+
+                © 2026 جميع الحقوق محفوظة
+
+            </p>
+
+        </div>
+
+    </footer>
+
+        <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+        <script type="module" src="assets/js/script.js?v=20260907-live"></script>
+
+</body>
+
+</html>
