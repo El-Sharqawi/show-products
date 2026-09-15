@@ -72,17 +72,61 @@ function normalizeProductImageSource(source) {
 
 function parseProductName(value) {
     const normalized = String(value || "").replace(/\s+/g, " ").trim();
-    const separatorIndex = normalized.search(/[.-]/);
-    if (separatorIndex < 0) return { main: normalized, badge: "" };
+    if (!normalized) return { main: "", badge: "" };
 
+    const separatorMatch = normalized.match(/\s*(?:-|–|—|\/|\.)\s*/);
+    if (!separatorMatch) return { main: normalized, badge: "" };
+
+    const separatorIndex = separatorMatch.index;
     const main = normalized.slice(0, separatorIndex).trim();
-    const badge = normalized.slice(separatorIndex + 1).trim();
+    const badge = normalized.slice(separatorIndex + separatorMatch[0].length).trim();
     if (!main || !badge) return { main: normalized, badge: "" };
-    return { main, badge };
+
+    const before = main.replace(/\s+/g, " ").trim();
+    const after = badge.replace(/\s+/g, " ").trim();
+    if (/^\d+([.,]\d+)?$/.test(before) && /^\d+([.,]\d+)?$/.test(after)) {
+        return { main: normalized, badge: "" };
+    }
+
+    return { main: before, badge: after };
+}
+
+function getExplicitProductBrand(product) {
+    return [
+        product?.brand,
+        product?.brandName,
+        product?.manufacturer,
+        product?.badge,
+        product?.productBrand,
+        product?.marka
+    ]
+        .map(value => String(value || "").trim())
+        .find(Boolean) || "";
 }
 
 function productParts(product) {
-    return parseProductName(productName(product));
+    const rawName = productName(product);
+    const explicitBrand = String(getExplicitProductBrand(product) || "").trim();
+    const legacyParts = parseProductName(rawName);
+
+    if (explicitBrand) {
+        return {
+            main: rawName,
+            badge: explicitBrand
+        };
+    }
+
+    if (legacyParts.badge) {
+        return {
+            main: legacyParts.main,
+            badge: legacyParts.badge
+        };
+    }
+
+    return {
+        main: rawName,
+        badge: ""
+    };
 }
 
 function getProductBrand(product) {
@@ -126,26 +170,72 @@ function getProductPackaging(product) {
     return normalizeProductName(`${packagingTerm} ${size}`);
 }
 
+function getProductPackagingGroup(product) {
+    const rawPackaging = [
+        product?.packaging,
+        product?.packageType,
+        product?.size,
+        product?.quantity,
+        getExplicitProductBrand(product),
+        productName(product)
+    ].map(value => normalizeProductName(value)).filter(Boolean).join(" ");
+
+    if (/(كانز|كان|علبه|علبة|can|cans)/i.test(rawPackaging)) return "01 كانز";
+    if (/(لتر|لترين|ل\b|liter|litre|l\b)/i.test(rawPackaging)) return "02 لتر";
+    if (/(مل|ملي|ملل|ml|milliliter)/i.test(rawPackaging)) return "03 مل";
+    if (/(زجاجه|زجاجة|ازازه|إزاز|bottle|glass)/i.test(rawPackaging)) return "04 زجاجة";
+    if (/(كيس|عبوه|عبوة|bag|pack|packet)/i.test(rawPackaging)) return "05 كيس/عبوة";
+    if (/(كرتونه|كرتونة|box|carton)/i.test(rawPackaging)) return "06 كرتونة";
+
+    const explicitPackaging = getProductPackaging(product);
+    return explicitPackaging ? `50 ${explicitPackaging}` : "99 غير محدد";
+}
+
+function compareProductText(first, second) {
+    return normalizeProductName(first).localeCompare(
+        normalizeProductName(second),
+        "ar",
+        { sensitivity: "base", numeric: true }
+    );
+}
+
+function isProductNameFirstCategory(category) {
+    const normalizedCategory = normalizeCategoryText(category);
+    return ["عصائر", "شيبسي", "سناكس", "مقرمشات", "بسكوت", "بسكويت", "كيك", "شكولاته", "شوكولاته", "شوكولا"]
+        .some(item => normalizeCategoryText(item) === normalizedCategory);
+}
+
 function compareProductsByCategoryAndBrand(a, b, categoryOrder) {
     const categoryCompare = getProductCategoryOrder(a, categoryOrder) - getProductCategoryOrder(b, categoryOrder);
     if (categoryCompare !== 0) return categoryCompare;
 
-    const brandCompare = getProductBrand(a).localeCompare(getProductBrand(b), "ar", { sensitivity: "base" });
-    if (brandCompare !== 0) return brandCompare;
-
-    const packagingCompare = getProductPackaging(a).localeCompare(getProductPackaging(b), "ar", { sensitivity: "base", numeric: true });
+    const packagingCompare = compareProductText(
+        getProductPackagingGroup(a),
+        getProductPackagingGroup(b)
+    );
     if (packagingCompare !== 0) return packagingCompare;
 
-    const nameCompare = normalizeProductName(productName(a)).localeCompare(normalizeProductName(productName(b)), "ar", { sensitivity: "base", numeric: true });
+    const nameCompare = compareProductText(productName(a), productName(b));
     if (nameCompare !== 0) return nameCompare;
+
+    const dynamicFieldCompare = compareProductText(getExplicitProductBrand(a), getExplicitProductBrand(b));
+    if (dynamicFieldCompare !== 0) return dynamicFieldCompare;
 
     return getProductCreationTime(a) - getProductCreationTime(b);
 }
 
 function getProductCategoryOrder(product, categoryOrder) {
     const category = normalizeCategoryText(product?.category);
-    const primaryCategories = ["مشروبات", "عصائر", "شيبسي", "مقرمشات"];
-    const primaryIndex = primaryCategories.findIndex(item => normalizeCategoryText(item) === category);
+    const primaryCategories = ["مشروبات", "عصائر", "شيبسي", "سناكس", "اندومي", "بسكوت", "كيك", "شكولاته", "بقالة"];
+    const categoryAliases = {
+        "شيبسي": ["شيبسي", "شيبس", "شبسي"],
+        "سناكس": ["سناكس", "سناك", "مقرمشات"],
+        "بسكوت": ["بسكوت", "بسكويت"],
+        "شكولاته": ["شكولاته", "شوكولاته", "شوكولا"]
+    };
+    const primaryIndex = primaryCategories.findIndex(item =>
+        (categoryAliases[item] || [item]).some(alias => normalizeCategoryText(alias) === category)
+    );
     if (primaryIndex >= 0) return primaryIndex;
 
     const savedCategoryIndex = [...categoryOrder.keys()].findIndex(item => normalizeCategoryText(item) === category);
@@ -292,6 +382,7 @@ function showProductModal(product) {
     };
     modalImage.alt = name;
     modalName.textContent = parts.main;
+    modalName.title = name;
     modalBadge.textContent = parts.badge;
     modalBadge.hidden = !parts.badge;
     modalPrice.innerHTML = priceMarkup(product, update);
@@ -307,8 +398,12 @@ function updateProductCard(card, product) {
         const parts = productParts(product);
         const update = latestUpdate(product.id);
         card.innerHTML = `
-            <div class="card-image-box"><img loading="lazy" decoding="async" alt="${escapeHtml(name)}" src="${escapeHtml(productImage(product) || PRODUCT_IMAGE_FALLBACK)}"></div>
-            <div class="card-body">
+            <div class="product-thumb card-image-box">
+                <div class="product-image-box">
+                    <img loading="lazy" decoding="async" alt="${escapeHtml(name)}" src="${escapeHtml(productImage(product) || PRODUCT_IMAGE_FALLBACK)}">
+                </div>
+            </div>
+            <div class="product-info card-body">
                 <h3 class="product-name">
                     <span class="product-name-main">${escapeHtml(parts.main)}</span>
                     ${parts.badge ? `<span class="product-name-badge">${escapeHtml(parts.badge)}</span>` : ""}
@@ -316,6 +411,8 @@ function updateProductCard(card, product) {
                 <span class="product-category">${escapeHtml(String(product.category || "").trim())}</span>
                 <span class="price">${cardPriceMarkup(product, update)}</span>
             </div>`;
+        const productNameElement = card.querySelector(".product-name");
+        productNameElement.title = name;
         const cardImage = card.querySelector("img");
         cardImage.addEventListener("error", () => {
             cardImage.onerror = null;
@@ -325,7 +422,7 @@ function updateProductCard(card, product) {
 
 function createProductCard(product) {
     const card = document.createElement("article");
-    card.className = "card";
+    card.className = "product-card card";
     card.dataset.productId = product.id;
     updateProductCard(card, product);
     return card;
