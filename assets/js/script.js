@@ -386,7 +386,7 @@ function showProductModal(product) {
         modalImage.src = PRODUCT_IMAGE_FALLBACK;
     };
     modalImage.alt = name;
-    modalName.textContent = parts.main;
+    modalName.textContent = name;
     modalName.title = name;
     modalBadge.textContent = parts.badge;
     modalBadge.hidden = !parts.badge;
