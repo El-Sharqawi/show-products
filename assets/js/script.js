@@ -23,6 +23,7 @@ let activeProductResults = [];
 let visibleProductCount = 48;
 const PRODUCT_IMAGE_FALLBACK = "https://placehold.co/320x240/eef2f4/64748b?text=No+Image";
 const FIREBASE_STORAGE_BUCKET = "supermarket-b0553.firebasestorage.app";
+const pageLoadStartedAt = performance.now();
 const firebaseConfig = {
     apiKey: "AIzaSyDOXucjJQHpWHH1Gc6BKdFkRgFGNsIoxoo",
     projectId: "supermarket-b0553",
@@ -35,6 +36,10 @@ let liveUnsubscribers = [];
 let fallbackLoadPromise = null;
 let hasLiveProductsSnapshot = false;
 let liveSyncStarted = false;
+
+function performanceLog(label, startedAt = pageLoadStartedAt) {
+    console.info(`[products-performance] ${label}: ${(performance.now() - startedAt).toFixed(1)}ms`);
+}
 
 function escapeHtml(value) {
     return String(value ?? "")
@@ -429,11 +434,14 @@ function createProductCard(product) {
 }
 
 function renderProducts(products, emptyMessage = "لا توجد منتجات متاحة حالياً") {
+    const renderStartedAt = performance.now();
+    performanceLog("render start");
     activeProductResults = sortProductsByCategoryAndBrand(products);
     productGrid.replaceChildren();
     if (!products.length) {
         productGrid.innerHTML = `<div class="no-results" style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted)">${emptyMessage}</div>`;
         if (loadMoreProductsButton) loadMoreProductsButton.hidden = true;
+        performanceLog("render end", renderStartedAt);
         return;
     }
 
@@ -445,6 +453,7 @@ function renderProducts(products, emptyMessage = "لا توجد منتجات م�
     if (loadMoreProductsButton) {
         loadMoreProductsButton.hidden = visibleProductCount >= activeProductResults.length;
     }
+    performanceLog("render end", renderStartedAt);
 }
 
 function applyProductSnapshotChanges(changes) {
@@ -503,9 +512,17 @@ function startLiveSync() {
 
     liveUnsubscribers.forEach(unsubscribe => unsubscribe());
     const firestore = window.firebase.firestore();
+    firestore.enablePersistence({ synchronizeTabs: true }).catch(error => {
+        if (error.code !== "failed-precondition" && error.code !== "unimplemented") {
+            console.warn("Firestore persistence unavailable:", error);
+        }
+    });
+    const productsRequestStartedAt = performance.now();
+    performanceLog("products request start", productsRequestStartedAt);
     liveUnsubscribers = [
         firestore.collection(PRODUCTS_COLLECTION).onSnapshot(snapshot => {
             hasLiveProductsSnapshot = true;
+            performanceLog("products received", productsRequestStartedAt);
             const changes = snapshot.docChanges();
             const productsById = new Map(allProducts.map(product => [product.id, product]));
             changes.forEach(change => {
@@ -515,11 +532,11 @@ function startLiveSync() {
             allProducts = [...productsById.values()];
             renderCategories();
             applyProductSnapshotChanges(changes);
-        }, handleLiveSyncError),
+        }, error => handleProductsSyncError(error)),
         firestore.collection(PRICE_UPDATES_COLLECTION).onSnapshot(snapshot => {
             applyLatestUpdates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             renderProducts(allProducts);
-        }, handleLiveSyncError),
+        }, error => console.error("تعذر مزامنة تحديثات الأسعار:", error)),
         firestore.collection("app_settings").doc("productCategories").onSnapshot(snapshot => {
             const categories = snapshot.data()?.categories;
             if (Array.isArray(categories)) {
@@ -527,11 +544,11 @@ function startLiveSync() {
                 renderCategories();
                 renderProducts(allProducts);
             }
-        }, handleLiveSyncError)
+        }, error => console.error("تعذر مزامنة الأقسام:", error))
     ];
 }
 
-function handleLiveSyncError(error) {
+function handleProductsSyncError(error) {
     console.error("تعذر مزامنة البيانات فورياً:", error);
     if (!allProducts.length) {
         loadProductsFallback();
@@ -543,15 +560,22 @@ async function loadProductsFallback() {
     if (fallbackLoadPromise) return fallbackLoadPromise;
 
     fallbackLoadPromise = (async () => {
-        const [products, categoryDocument, updates] = await Promise.all([
-            fetchFirestoreCollection(PRODUCTS_COLLECTION),
+        const products = await fetchFirestoreCollection(PRODUCTS_COLLECTION);
+
+        if (hasLiveProductsSnapshot) return;
+
+        allProducts = products;
+        renderCategories();
+        renderProducts(allProducts);
+        performanceLog("fallback products rendered");
+
+        const [categoryDocument, updates] = await Promise.all([
             fetchWithRetry(`${FIRESTORE_API_ROOT}/app_settings/productCategories`, { retries: 1, timeoutMs: 3000 }).then(response => response.json()).catch(() => null),
             fetchFirestoreCollection(PRICE_UPDATES_COLLECTION)
         ]);
 
         if (hasLiveProductsSnapshot) return;
 
-        allProducts = products;
         const savedCategories = categoryDocument?.fields?.categories;
         const parsedCategories = savedCategories ? parseFirestoreValue(savedCategories) : null;
         if (Array.isArray(parsedCategories)) categoryOrder = parsedCategories.map(category => String(category).trim()).filter(Boolean);
