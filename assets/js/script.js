@@ -35,6 +35,13 @@ let categoryOrder = [];
 let liveUnsubscribers = [];
 let fallbackLoadPromise = null;
 let hasLiveProductsSnapshot = false;
+function cleanupLegacyCache() {
+    try {
+        localStorage.removeItem("show-products-first-page-v1");
+    } catch (error) {
+        console.warn("تعذر تنظيف ذاكرة المنتجات القديمة:", error);
+    }
+}
 let liveSyncStarted = false;
 
 function performanceLog(label, startedAt = pageLoadStartedAt) {
@@ -457,10 +464,45 @@ function renderProducts(products, emptyMessage = "لا توجد منتجات م�
 }
 
 function applyProductSnapshotChanges(changes) {
-    renderProducts(allProducts);
+    if (!changes.length) return;
+
+    const requiresListRefresh = changes.some(change => {
+        if (change.type === "added" || change.type === "removed") return true;
+        const data = change.doc.data() || {};
+        return [
+            "name", "productName", "brand", "brandName", "manufacturer",
+            "badge", "productBrand", "marka", "category", "createdAt",
+            "packaging", "packageType", "size", "quantity"
+        ].some(field => Object.prototype.hasOwnProperty.call(data, field));
+    });
+
+    if (requiresListRefresh) {
+        renderProducts(getVisibleProducts());
+        return;
+    }
+
+    const productsById = new Map(allProducts.map(product => [String(product.id), product]));
+    changes.forEach(change => {
+        if (change.type === "removed") return;
+        const card = productGrid.querySelector(`[data-product-id="${CSS.escape(change.doc.id)}"]`);
+        const product = productsById.get(String(change.doc.id));
+        if (card && product) updateProductCard(card, product);
+    });
+}
+
+function getVisibleProducts() {
+    const query = searchInput?.value.trim().toLowerCase() || "";
+    const category = categoriesContainer?.querySelector(".category.active")?.dataset.category || "الكل";
+    return allProducts.filter(product => {
+        const matchesCategory = category === "الكل" || product.category === category;
+        const matchesQuery = !query || [productName(product), product.category, product.price]
+            .some(value => String(value ?? "").toLowerCase().includes(query));
+        return matchesCategory && matchesQuery;
+    });
 }
 
 function renderCategories() {
+    const selectedCategory = categoriesContainer?.querySelector(".category.active")?.dataset.category || "الكل";
     const productCategories = [...new Set(allProducts.map(product => String(product.category || "").trim()).filter(Boolean))];
     const categories = [
         ...categoryOrder.filter(category => productCategories.includes(category)),
@@ -469,7 +511,10 @@ function renderCategories() {
     categoriesContainer.replaceChildren();
     ["الكل", ...categories].forEach((category, index) => {
         const button = document.createElement("button");
-        button.className = `category${index === 0 ? " active" : ""}`;
+        const isActive = categories.includes(selectedCategory) || selectedCategory === "الكل"
+            ? category === selectedCategory
+            : index === 0;
+        button.className = `category${isActive ? " active" : ""}`;
         button.textContent = category;
         button.dataset.category = category;
         categoriesContainer.appendChild(button);
@@ -483,6 +528,15 @@ function applyLatestUpdates(updates) {
         const time = getUpdateTime(update);
         const currentTime = getUpdateTime(current);
         if (!current || time > currentTime) latestPriceUpdates.set(update.productId, update);
+    });
+}
+
+function refreshVisiblePrices() {
+    const productsById = new Map(allProducts.map(product => [String(product.id), product]));
+    productGrid.querySelectorAll("[data-product-id]").forEach(card => {
+        const product = productsById.get(String(card.dataset.productId));
+        const price = card.querySelector(".price");
+        if (product && price) price.innerHTML = cardPriceMarkup(product, latestUpdate(product.id));
     });
 }
 
@@ -535,14 +589,14 @@ function startLiveSync() {
         }, error => handleProductsSyncError(error)),
         firestore.collection(PRICE_UPDATES_COLLECTION).onSnapshot(snapshot => {
             applyLatestUpdates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            renderProducts(allProducts);
+            refreshVisiblePrices();
         }, error => console.error("تعذر مزامنة تحديثات الأسعار:", error)),
         firestore.collection("app_settings").doc("productCategories").onSnapshot(snapshot => {
             const categories = snapshot.data()?.categories;
             if (Array.isArray(categories)) {
                 categoryOrder = [...new Set(categories.map(category => String(category).trim()).filter(Boolean))];
                 renderCategories();
-                renderProducts(allProducts);
+                renderProducts(getVisibleProducts());
             }
         }, error => console.error("تعذر مزامنة الأقسام:", error))
     ];
@@ -604,17 +658,14 @@ categoriesContainer?.addEventListener("click", event => {
     if (!button) return;
     document.querySelectorAll(".category").forEach(item => item.classList.remove("active"));
     button.classList.add("active");
-    const category = button.dataset.category;
     visibleProductCount = 48;
-    renderProducts(category === "الكل" ? allProducts : allProducts.filter(product => product.category === category));
+    renderProducts(getVisibleProducts());
 });
 
 searchInput?.addEventListener("input", () => {
     const query = searchInput.value.trim().toLowerCase();
     visibleProductCount = 48;
-    const filteredProducts = allProducts.filter(product => [productName(product), product.category, product.price]
-        .some(value => String(value ?? "").toLowerCase().includes(query)));
-    renderProducts(filteredProducts, query ? "لا يوجد منتج بهذا الاسم" : "لا توجد منتجات متاحة حالياً");
+    renderProducts(getVisibleProducts(), query ? "لا يوجد منتج بهذا الاسم" : "لا توجد منتجات متاحة حالياً");
 });
 
 loadMoreProductsButton?.addEventListener("click", () => {
@@ -641,4 +692,5 @@ if (localStorage.getItem("theme") === "dark") {
     if (darkModeToggle) darkModeToggle.innerHTML = '<i class="fa-solid fa-sun"></i>';
 }
 
+cleanupLegacyCache();
 startLiveSync();
